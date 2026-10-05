@@ -129,6 +129,35 @@
   .nav-btn:hover{ background:var(--gold); color:#000; transform:translateY(-1px); }
   .nav-btn.ghost{ border-color:#3a3222; color:#8c8268; }
 
+  .run-clock{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Special Elite',monospace; font-size:1rem; letter-spacing:.18em;
+    color:var(--gold-bright);
+    border:1px solid rgba(212,175,55,.45); border-radius:40px;
+    padding:6px 14px; background:rgba(212,175,55,.06);
+    box-shadow:0 0 16px rgba(212,175,55,.12);
+  }
+  .run-clock .dot{
+    width:8px; height:8px; border-radius:50%; background:var(--red);
+    box-shadow:0 0 8px var(--red); animation:blink 1s steps(1,end) infinite;
+  }
+  @keyframes blink{ 0%,49%{opacity:1;} 50%,100%{opacity:.15;} }
+  .run-clock.stopped .dot{ background:var(--green); box-shadow:0 0 8px var(--green); animation:none; }
+
+  .big-clock{
+    text-align:center; margin:0 0 26px;
+  }
+  .big-clock .t{
+    font-family:'Special Elite',monospace;
+    font-size:clamp(2.4rem,9vw,3.6rem);
+    color:var(--gold-bright); letter-spacing:.14em; line-height:1;
+    text-shadow:0 0 26px rgba(212,175,55,.3);
+  }
+  .big-clock .lbl{
+    font-family:'Cinzel',serif; font-size:.7rem; letter-spacing:.3em;
+    text-transform:uppercase; color:#8a8268; margin-top:8px;
+  }
+
   /* ---------- DOSSIER ---------- */
   .welcome-banner{
     border:1px solid rgba(212,175,55,.35);
@@ -273,6 +302,18 @@
   }
   .locked-line{
     font-family:'Special Elite',monospace; font-size:.8rem; color:#7d7d7d; letter-spacing:.08em;
+  }
+
+  function paintClock(){
+    const a = agent(); if(!a) return;
+    const t = fmt(missionElapsed());
+    const rc = document.getElementById('runClockTime');
+    const bc = document.getElementById('bigClock');
+    if(rc) rc.textContent = t;
+    if(bc) bc.textContent = t;
+    const done = a.progress.every(p=>p.solved);
+    const wrap = document.getElementById('runClock');
+    if(wrap) wrap.classList.toggle('stopped', done);
   }
 
   /* ---------- LEADERBOARD ---------- */
@@ -448,6 +489,9 @@
 
   <nav class="topbar">
     <div class="agent-chip" id="agentChip">AGENT —</div>
+    <div class="run-clock" id="runClock" title="Time since you entered the hunt">
+      <span class="dot"></span><span id="runClockTime">00:00</span>
+    </div>
     <button class="nav-btn" data-panel="dossierPanel">Dossier</button>
     <button class="nav-btn" data-panel="huntPanel">The Hunt</button>
     <button class="nav-btn" data-panel="boardPanel">Leaderboard</button>
@@ -514,6 +558,11 @@
         <div class="sub">Solve in order &middot; the clock is running</div>
       </div>
 
+      <div class="big-clock">
+        <div class="t" id="bigClock">00:00</div>
+        <div class="lbl">Mission Clock &mdash; running since you entered</div>
+      </div>
+
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
         <div class="progress-meta">
@@ -542,7 +591,7 @@
 
       <div class="lb-controls">
         <button class="btn-line" data-sort="level1">Fastest Level 1</button>
-        <button class="btn-line" data-sort="total">Most Cleared · Fastest Total</button>
+        <button class="btn-line" data-sort="total">Fastest Total Time</button>
         <button class="btn-line" data-sort="points">Points</button>
         <button class="btn-line" id="exportBtn">Export CSV</button>
         <button class="btn-line" id="resetBtn">Reset Board</button>
@@ -553,7 +602,7 @@
           <thead>
             <tr>
               <th>#</th><th>Agent</th><th>Class</th><th>Sec</th>
-              <th>Adm.</th><th>Cleared</th><th>Level 1</th><th>Total</th><th>Pts</th>
+              <th>Adm.</th><th>Level 1 Time</th><th>Total Time</th><th>Pts</th>
             </tr>
           </thead>
           <tbody id="lbBody"></tbody>
@@ -701,6 +750,31 @@ const LEVELS = [
     return LEVELS.map(() => ({ solved:false, startedAt:null, time:null, penalty:0, tries:0, hintUsed:false }));
   }
 
+  // Level 1 is always live from the moment the agent enters; later levels
+  // start the instant the previous one is cracked.
+  function syncClocks(){
+    updateAgent(a => {
+      if(!a.sessionStart) a.sessionStart = now();
+      if(a.progress[0] && !a.progress[0].startedAt) a.progress[0].startedAt = a.sessionStart;
+      for(let i=1;i<a.progress.length;i++){
+        if(a.progress[i-1].solved && !a.progress[i].startedAt){
+          a.progress[i].startedAt = a.progress[i-1].solvedAtMs || now();
+        }
+      }
+    });
+  }
+
+  function missionElapsed(){
+    const a = agent();
+    if(!a || !a.sessionStart) return 0;
+    const done = a.progress.every(p=>p.solved);
+    if(done){
+      const last = Math.max(...a.progress.map(p=>p.solvedAtMs||0));
+      return (last - a.sessionStart)/1000;
+    }
+    return (now() - a.sessionStart)/1000;
+  }
+
   /* ---------- AUTH ---------- */
   const gate = document.getElementById('authGate');
   const site = document.getElementById('siteBody');
@@ -733,11 +807,13 @@ const LEVELS = [
       all[adm] = {
         name, section, klass, admission: adm,
         registeredAt: new Date().toISOString(),
+        sessionStart: now(),          // mission clock starts at 00:00 right here
         progress: blankProgress()
       };
     } else {
       // returning agent — keep their progress, refresh details
       all[adm].name = name; all[adm].section = section; all[adm].klass = klass;
+      if(!all[adm].sessionStart) all[adm].sessionStart = now();
       if(!Array.isArray(all[adm].progress) || all[adm].progress.length !== LEVELS.length){
         const old = all[adm].progress || [];
         all[adm].progress = blankProgress().map((p,i) => old[i] || p);
@@ -761,6 +837,8 @@ const LEVELS = [
       const a = agent();
       document.getElementById('welcomeName').textContent = 'Welcome, Agent ' + a.name;
       document.getElementById('agentChip').textContent = 'AGENT ' + a.name.toUpperCase() + ' · ADM ' + a.admission;
+      syncClocks();
+      paintClock();
       renderLevels(); renderBoard();
       startTicker();
       window.scrollTo({top:0});
@@ -794,7 +872,10 @@ const LEVELS = [
   function clearedCount(a){ return a.progress.filter(p=>p.solved).length; }
   function totalTime(a){
     const solved = a.progress.filter(p=>p.solved);
-    return solved.length ? solved.reduce((s,p)=>s+p.time,0) : null;
+    if(!solved.length) return null;
+    const last = Math.max(...solved.map(p=>p.solvedAtMs||0));
+    if(a.sessionStart && last) return (last - a.sessionStart)/1000;
+    return solved.reduce((s,p)=>s+p.time,0);
   }
   function totalPoints(a){
     return a.progress.reduce((s,p,i)=> s + (p.solved ? (LEVELS[i].points||0) : 0), 0);
@@ -825,9 +906,6 @@ const LEVELS = [
         inner += `<div class="locked-line">🔒 LOCKED — clear Level ${i} first.</div>`;
       } else if(p.solved){
         inner += `<div class="solved-line">✔ SOLVED in ${fmt(p.time)} &nbsp;·&nbsp; ${lv.points||0} pts &nbsp;·&nbsp; ${p.tries} attempt${p.tries===1?'':'s'}${p.hintUsed?' · hint used':''}</div>`;
-      } else if(!p.startedAt){
-        inner += `<p class="riddle" style="color:#9a9076;font-style:italic;">Clue sealed. Your timer begins the moment you reveal it.</p>
-                  <div class="answer-row"><button class="btn-gold" data-start="${i}">Reveal Clue &amp; Start Timer</button></div>`;
       } else {
         inner += `<div class="level-body">
             <p class="riddle">${lv.riddle}</p>
@@ -900,8 +978,10 @@ const LEVELS = [
       p.tries = (p.tries||0) + 1;
       if(ok){
         p.solved = true;
-        p.time = (now() - p.startedAt)/1000 + p.penalty;
+        p.solvedAtMs = now();
+        p.time = (p.solvedAtMs - (p.startedAt || a.sessionStart))/1000 + p.penalty;
         p.solvedAt = new Date().toISOString();
+        if(a.progress[i+1] && !a.progress[i+1].startedAt) a.progress[i+1].startedAt = p.solvedAtMs;
       } else {
         p.penalty += SETTINGS.wrongAnswerPenaltySeconds;
       }
@@ -923,12 +1003,25 @@ const LEVELS = [
     clearInterval(tickTimer);
     tickTimer = setInterval(() => {
       const a = agent(); if(!a) return;
+      paintClock();
       document.querySelectorAll('[data-timer]').forEach(el => {
         const i = +el.dataset.timer;
         const p = a.progress[i];
         if(p && !p.solved && p.startedAt) el.textContent = fmt(levelTime(p));
       });
     }, 1000);
+  }
+
+  function paintClock(){
+    const a = agent(); if(!a) return;
+    const t = fmt(missionElapsed());
+    const rc = document.getElementById('runClockTime');
+    const bc = document.getElementById('bigClock');
+    if(rc) rc.textContent = t;
+    if(bc) bc.textContent = t;
+    const done = a.progress.every(p=>p.solved);
+    const wrap = document.getElementById('runClock');
+    if(wrap) wrap.classList.toggle('stopped', done);
   }
 
   /* ---------- LEADERBOARD ---------- */
@@ -943,10 +1036,11 @@ const LEVELS = [
       }
     },
     total: {
-      label: 'Ranked by levels cleared, then fastest total time',
+      label: 'Ranked by fastest total time',
       cmp: (x,y) => {
-        if(y.cleared !== x.cleared) return y.cleared - x.cleared;
-        return (x.total ?? Infinity) - (y.total ?? Infinity);
+        const a=x.total ?? Infinity, b=y.total ?? Infinity;
+        if(a!==b) return a-b;
+        return y.cleared - x.cleared;
       }
     },
     points: {
@@ -974,7 +1068,7 @@ const LEVELS = [
     document.getElementById('boardSub').textContent = SORTS[sortMode].label;
     const body = document.getElementById('lbBody');
     if(!data.length){
-      body.innerHTML = `<tr><td colspan="9" class="empty-lb">NO AGENTS ON RECORD YET</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="empty-lb">NO AGENTS ON RECORD YET</td></tr>`;
       return;
     }
     body.innerHTML = data.map((r,i) => `
@@ -984,7 +1078,6 @@ const LEVELS = [
         <td>${esc(r.klass)}</td>
         <td>${esc(r.section)}</td>
         <td class="mono">${esc(r.adm)}</td>
-        <td class="mono">${r.cleared}/${LEVELS.length}</td>
         <td class="mono">${fmt(r.l1)}</td>
         <td class="mono">${fmt(r.total)}</td>
         <td class="mono">${r.points}</td>
@@ -997,10 +1090,9 @@ const LEVELS = [
 
   document.getElementById('exportBtn').addEventListener('click', () => {
     const data = rows().sort(SORTS[sortMode].cmp);
-    const head = ['Rank','Name','Class','Section','Admission','Cleared','Level1(s)','Total(s)','Points'];
+    const head = ['Rank','Name','Class','Section','Admission','Level1(s)','Total(s)','Points'];
     const lines = [head.join(',')].concat(data.map((r,i) =>
       [i+1, '"'+r.name.replace(/"/g,'""')+'"', r.klass, r.section, r.adm,
-       r.cleared+'/'+LEVELS.length,
        r.l1 != null ? r.l1.toFixed(1) : '',
        r.total != null ? r.total.toFixed(1) : '',
        r.points].join(',')));
