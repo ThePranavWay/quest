@@ -311,7 +311,7 @@
     const bc = document.getElementById('bigClock');
     if(rc) rc.textContent = t;
     if(bc) bc.textContent = t;
-    const done = a.progress.every(p=>p.solved);
+    const done = LEVELS.length > 0 && a.progress.every(p=>p.solved);
     const wrap = document.getElementById('runClock');
     if(wrap) wrap.classList.toggle('stopped', done);
   }
@@ -495,7 +495,6 @@
     <button class="nav-btn" data-panel="dossierPanel">Dossier</button>
     <button class="nav-btn" data-panel="huntPanel">The Hunt</button>
     <button class="nav-btn" data-panel="boardPanel">Leaderboard</button>
-    <button class="nav-btn ghost" id="logoutBtn">Switch Agent</button>
   </nav>
 
   <main>
@@ -540,10 +539,12 @@
         <p>It's the combination of brilliance and cruelty: a killer who turned murder into a puzzle, who mailed proof of his crimes alongside codes designed to taunt rather than confess. Decades later, amateur sleuths, codebreakers, and investigators around the world continue to chase his identity &mdash; and now, so do you.</p>
       </section>
 
+
+
       <figure class="evidence">
         <h4>Recovered Case File</h4>
-        <img src="images/case_file.jpg" alt="Aged Zodiac Killer case notes">
-        <figcaption>EXHIBIT 01 &mdash; Field notes recovered from the archive. Study it carefully, Agent.</figcaption>
+        <img src="images/case_file.png" alt="Aged handwritten Zodiac Killer notesheet">
+        <figcaption>EXHIBIT 01 &mdash; Field notes recovered from the archive. Study them carefully, Agent.</figcaption>
       </figure>
 
       <div style="text-align:center;margin:40px 0 10px;">
@@ -563,7 +564,7 @@
         <div class="lbl">Mission Clock &mdash; running since you entered</div>
       </div>
 
-      <div class="progress-wrap">
+      <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
         <div class="progress-meta">
           <span id="progressText">0 / 0 LEVELS CLEARED</span>
@@ -572,6 +573,11 @@
       </div>
 
       <div id="levelList"></div>
+
+      <div id="noLevels" class="level-card" style="display:none;text-align:center;">
+        <h4 style="font-family:'Cinzel',serif;color:var(--gold-bright);letter-spacing:.14em;text-transform:uppercase;margin:0 0 10px;">Clues Pending Release</h4>
+        <p style="color:#cdbf90;margin:0;line-height:1.8;">The archive is sealed for now, Agent. Your mission clock is already running &mdash; the first cipher will be released shortly.</p>
+      </div>
 
       <div id="finishBox" style="display:none;text-align:center;margin-top:28px;">
         <div class="level-card solved">
@@ -587,14 +593,6 @@
       <div class="panel-head">
         <h3>Leaderboard</h3>
         <div class="sub" id="boardSub">Ranked by fastest Level 1</div>
-      </div>
-
-      <div class="lb-controls">
-        <button class="btn-line" data-sort="level1">Fastest Level 1</button>
-        <button class="btn-line" data-sort="total">Fastest Total Time</button>
-        <button class="btn-line" data-sort="points">Points</button>
-        <button class="btn-line" id="exportBtn">Export CSV</button>
-        <button class="btn-line" id="resetBtn">Reset Board</button>
       </div>
 
       <div class="table-scroll">
@@ -657,46 +655,23 @@ const SETTINGS = {
      points   : points awarded on solve
    ------------------------------------------------------------------ */
 const LEVELS = [
-  {
-    title: "The First Signature",
-    riddle: "Every hunt starts with a name. The killer signed his letters with a symbol that looks like the sight of a gun. What single word did he call himself in his very first letter — \"This is the ______ speaking\"?",
-    cipher: "",
-    answers: ["zodiac"],
-    hint: "It is also the name of this website.",
-    points: 100
-  },
-  {
-    title: "Count the Ciphers",
-    riddle: "He enclosed a set of cryptograms across his letters — known as Z408, Z340, Z32 and Z13. How many cryptograms is that in total? Answer with a number.",
-    cipher: "Z408   ·   Z340   ·   Z32   ·   Z13",
-    answers: ["4", "four"],
-    hint: "Just count the codes listed above.",
-    points: 100
-  },
-  {
-    title: "Break the Shift",
-    riddle: "A classic Caesar cipher, shifted by 3 letters backwards. Decode the message below and type the decoded word.",
-    cipher: "F D H V D U",
-    answers: ["caesar"],
-    hint: "F → C, D → A ... shift every letter back by three.",
-    points: 150
-  },
-  {
-    title: "The Year of the Solve",
-    riddle: "The 340-character cipher defeated the world for more than 51 years before a team of codebreakers finally cracked it. In which year was the Z340 solved?",
-    cipher: "",
-    answers: ["2020"],
-    hint: "December of that year — the same year the world stayed indoors.",
-    points: 150
-  },
-  {
-    title: "Final Transmission",
-    riddle: "The last attack attributed to the Zodiac was the murder of a cab driver in Presidio Heights, San Francisco. Type his <strong>surname</strong> to close the case.",
-    cipher: "1 0 . 1 1 . 1 9 6 9   —   P R E S I D I O   H E I G H T S",
-    answers: ["stine", "paul stine", "paul lee stine"],
-    hint: "Paul Lee ______.",
-    points: 200
-  }
+  /* ----------------------------------------------------------------
+     NO LEVELS YET — add them here when ready.
+     Copy this template inside the brackets, one block per level:
+
+     {
+       title:   "The First Signature",
+       riddle:  "Your question text here (HTML allowed).",
+       cipher:  "",                      // optional code block, "" to hide
+       answers: ["zodiac"],              // all accepted answers
+       hint:    "An optional nudge.",    // "" to hide the hint button
+       points:  100
+     },
+
+     Level 1's timer starts automatically at 00:00 when the agent enters.
+     Everything else — the hunt page, progress bar, leaderboard and
+     scoring — updates itself. Nothing below needs editing.
+     ---------------------------------------------------------------- */
 ];
 </script>
 
@@ -767,7 +742,7 @@ const LEVELS = [
   function missionElapsed(){
     const a = agent();
     if(!a || !a.sessionStart) return 0;
-    const done = a.progress.every(p=>p.solved);
+    const done = LEVELS.length > 0 && a.progress.every(p=>p.solved);
     if(done){
       const last = Math.max(...a.progress.map(p=>p.solvedAtMs||0));
       return (last - a.sessionStart)/1000;
@@ -845,7 +820,8 @@ const LEVELS = [
     }, 550);
   }
 
-  document.getElementById('logoutBtn').addEventListener('click', () => {
+  const logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.addEventListener('click', () => {
     localStorage.removeItem(CURRENT_KEY);
     location.reload();
   });
@@ -885,6 +861,14 @@ const LEVELS = [
     const a = agent(); if(!a) return;
     const list = document.getElementById('levelList');
     list.innerHTML = '';
+
+    const none = LEVELS.length === 0;
+    document.getElementById('noLevels').style.display = none ? 'block' : 'none';
+    document.getElementById('progressWrap').style.display = none ? 'none' : 'block';
+    if(none){
+      document.getElementById('finishBox').style.display = 'none';
+      return;
+    }
 
     LEVELS.forEach((lv, i) => {
       const p = a.progress[i];
@@ -928,7 +912,7 @@ const LEVELS = [
     document.getElementById('progressFill').style.width = (done/LEVELS.length*100) + '%';
     document.getElementById('progressText').textContent = `${done} / ${LEVELS.length} LEVELS CLEARED`;
     document.getElementById('totalTimeText').textContent = 'TOTAL ' + fmt(totalTime(a));
-    document.getElementById('finishBox').style.display = (done === LEVELS.length) ? 'block' : 'none';
+    document.getElementById('finishBox').style.display = (LEVELS.length && done === LEVELS.length) ? 'block' : 'none';
   }
 
   document.addEventListener('click', e => {
@@ -1019,7 +1003,7 @@ const LEVELS = [
     const bc = document.getElementById('bigClock');
     if(rc) rc.textContent = t;
     if(bc) bc.textContent = t;
-    const done = a.progress.every(p=>p.solved);
+    const done = LEVELS.length > 0 && a.progress.every(p=>p.solved);
     const wrap = document.getElementById('runClock');
     if(wrap) wrap.classList.toggle('stopped', done);
   }
@@ -1088,7 +1072,8 @@ const LEVELS = [
     b.addEventListener('click', () => { sortMode = b.dataset.sort; renderBoard(); });
   });
 
-  document.getElementById('exportBtn').addEventListener('click', () => {
+  const exportBtn = document.getElementById('exportBtn');
+  if(exportBtn) exportBtn.addEventListener('click', () => {
     const data = rows().sort(SORTS[sortMode].cmp);
     const head = ['Rank','Name','Class','Section','Admission','Level1(s)','Total(s)','Points'];
     const lines = [head.join(',')].concat(data.map((r,i) =>
@@ -1104,7 +1089,8 @@ const LEVELS = [
     toast('Leaderboard exported');
   });
 
-  document.getElementById('resetBtn').addEventListener('click', () => {
+  const resetBtn = document.getElementById('resetBtn');
+  if(resetBtn) resetBtn.addEventListener('click', () => {
     if(!confirm('Erase ALL agents and scores from this browser? This cannot be undone.')) return;
     localStorage.removeItem(AGENTS_KEY);
     localStorage.removeItem(CURRENT_KEY);
